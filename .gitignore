@@ -1,0 +1,8 @@
+node_modules/
+.env
+assets/documents/*
+!assets/documents/.gitkeep
+assets/temp_resources/*
+!assets/temp_resources/.gitkeep
+assets/images/**/*
+!assets/images/**/.gitkeep
