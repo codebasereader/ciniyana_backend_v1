@@ -4,14 +4,19 @@ const app = express();
 const http = require("http");
 const server = http.createServer(app);
 
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const mongoose = require("mongoose");
 const morgan = require("morgan");
 const helmet = require("helmet");
-const path = require("path");
 const cors = require("cors");
 const fs = require("fs");
+
+if (!process.env.JWT_SECRET) {
+  console.error("Missing JWT_SECRET in .env");
+  process.exit(1);
+}
 
 app.use(cors());
 
