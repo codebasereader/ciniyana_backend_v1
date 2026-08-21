@@ -14,6 +14,7 @@ const handleUpload = (req, res, next) => {
 };
 
 router.get("/", flashBackController.list);
+router.put("/reorder", authenticate, flashBackController.reorder);
 router.get("/:slug", flashBackController.getBySlug);
 
 router.post("/", authenticate, handleUpload, flashBackController.create);

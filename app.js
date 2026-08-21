@@ -61,7 +61,23 @@ const PORT = process.env.PORT || 3000;
 
 mongoose
   .connect(DB_URL)
-  .then(() => {
+  .then(async () => {
+    const FlashBack = require("./models/flashback");
+    const missingOrder = await FlashBack.find({
+      $or: [{ order: { $exists: false } }, { order: null }],
+    }).sort({ createdAt: 1 });
+
+    if (missingOrder.length > 0) {
+      const maxDoc = await FlashBack.findOne({ order: { $exists: true, $ne: null } })
+        .sort({ order: -1 })
+        .select("order");
+      let next = typeof maxDoc?.order === "number" ? maxDoc.order + 1 : 0;
+      for (const doc of missingOrder) {
+        doc.order = next++;
+        await doc.save();
+      }
+    }
+
     server.listen(PORT, () => {
       console.log("DB Connection Successful");
       console.log(`Server running on port ${PORT}`);

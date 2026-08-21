@@ -12,6 +12,7 @@ const toPost = (doc) => {
     slug: obj.slug,
     image: obj.image || "",
     date: obj.date || "",
+    order: typeof obj.order === "number" ? obj.order : 0,
     title: {
       kn: obj.title?.kn || "",
       en: obj.title?.en || "",
@@ -63,7 +64,9 @@ const removePostFolder = (postId) => {
 };
 
 const saveHeroImage = (postId, tempFile) => {
-  const ext = path.extname(tempFile.originalname || tempFile.filename).toLowerCase() || ".jpg";
+  const ext =
+    path.extname(tempFile.originalname || tempFile.filename).toLowerCase() ||
+    ".jpg";
   const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext)
     ? ext === ".jpeg"
       ? ".jpg"
@@ -108,9 +111,14 @@ const mapBodyFields = (body) => ({
   },
 });
 
+const getNextOrder = async () => {
+  const last = await FlashBack.findOne().sort({ order: -1 }).select("order");
+  return typeof last?.order === "number" ? last.order + 1 : 0;
+};
+
 exports.list = async (req, res) => {
   try {
-    const docs = await FlashBack.find().sort({ createdAt: -1 });
+    const docs = await FlashBack.find().sort({ order: 1 });
     return res.status(200).json({
       posts: docs.map(toPost),
     });
@@ -125,7 +133,7 @@ exports.list = async (req, res) => {
 exports.getBySlug = async (req, res) => {
   try {
     const slug = normalizeSlug(req.params.slug);
-    const docs = await FlashBack.find().sort({ createdAt: -1 });
+    const docs = await FlashBack.find().sort({ order: 1 });
     const index = docs.findIndex((d) => d.slug === slug);
 
     if (index === -1) {
@@ -135,7 +143,9 @@ exports.getBySlug = async (req, res) => {
     const post = docs[index];
     const prev = index > 0 ? docs[index - 1] : null;
     const next = index < docs.length - 1 ? docs[index + 1] : null;
-    const related = docs.filter((d) => String(d._id) !== String(post._id)).slice(0, 3);
+    const related = docs
+      .filter((d) => String(d._id) !== String(post._id))
+      .slice(0, 3);
 
     return res.status(200).json({
       post: toPost(post),
@@ -178,8 +188,11 @@ exports.create = async (req, res) => {
       return res.status(409).json({ message: "Slug already exists" });
     }
 
+    const order = await getNextOrder();
+
     const post = await FlashBack.create({
       ...fields,
+      order,
       image: "",
     });
 
@@ -261,6 +274,7 @@ exports.update = async (req, res) => {
       }
     }
 
+    // Keep existing order — reorder endpoint owns sort position
     Object.assign(post, fields);
 
     if (req.file) {
@@ -313,6 +327,56 @@ exports.remove = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: "Failed to delete flash back post",
+      error: error.message,
+    });
+  }
+};
+
+exports.reorder = async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      return res.status(400).json({
+        message: "orderedIds must be a non-empty array",
+      });
+    }
+
+    const uniqueIds = [...new Set(orderedIds.map(String))];
+    if (uniqueIds.length !== orderedIds.length) {
+      return res.status(400).json({
+        message: "orderedIds must not contain duplicates",
+      });
+    }
+
+    const allPosts = await FlashBack.find().select("_id");
+    const allIds = allPosts.map((p) => String(p._id)).sort();
+    const incomingSorted = [...uniqueIds].sort();
+
+    if (
+      allIds.length !== incomingSorted.length ||
+      allIds.some((id, i) => id !== incomingSorted[i])
+    ) {
+      return res.status(400).json({
+        message: "orderedIds must include every flash back post id exactly once",
+      });
+    }
+
+    await Promise.all(
+      orderedIds.map((id, index) =>
+        FlashBack.findByIdAndUpdate(id, { order: index })
+      )
+    );
+
+    const posts = await FlashBack.find().sort({ order: 1 });
+
+    return res.status(200).json({
+      message: "Flash back order updated",
+      posts: posts.map(toPost),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Failed to reorder flash back posts",
       error: error.message,
     });
   }

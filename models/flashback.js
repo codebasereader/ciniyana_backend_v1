@@ -22,6 +22,12 @@ const flashBackSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    order: {
+      type: Number,
+      required: true,
+      default: 0,
+      index: true,
+    },
     title: {
       kn: { type: String, required: true, trim: true },
       en: { type: String, required: true, trim: true },
