@@ -28,6 +28,7 @@ app.use(cors());
   "assets/images/full/low_res",
   "assets/images/thumb/high_res",
   "assets/images/thumb/low_res",
+  "images/flashback/temp",
 ].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -42,11 +43,14 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 const API_ROOT = "/";
 app.use(`${API_ROOT}assets`, express.static(path.join(__dirname, "assets")));
+app.use(`${API_ROOT}images`, express.static(path.join(__dirname, "images")));
 app.disable("etag");
 
 const userRoutes = require("./routes/user");
+const flashBackRoutes = require("./routes/flashback");
 
 app.use(`${API_ROOT}user`, userRoutes);
+app.use(`${API_ROOT}flashback`, flashBackRoutes);
 
 app.use("/", (req, res) => {
   return res.status(200).send("Welcome!");

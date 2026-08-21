@@ -6,3 +6,7 @@ assets/temp_resources/*
 !assets/temp_resources/.gitkeep
 assets/images/**/*
 !assets/images/**/.gitkeep
+images/flashback/**
+!images/flashback/.gitkeep
+!images/flashback/temp/
+!images/flashback/temp/.gitkeep
