@@ -16,3 +16,5 @@ images/info-special/**
 !images/info-special/.gitkeep
 images/photo-story/**
 !images/photo-story/.gitkeep
+images/off-the-camera/**
+!images/off-the-camera/.gitkeep
