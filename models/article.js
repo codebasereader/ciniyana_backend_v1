@@ -9,6 +9,11 @@ const galleryItemSchema = new mongoose.Schema(
   {
     src: { type: String, required: true },
     caption: localizedString,
+    afterParagraph: {
+      type: Number,
+      min: 1,
+      required: false,
+    },
   },
   { _id: false }
 );

@@ -53,13 +53,23 @@ const toPost = (doc) => {
     },
     profile,
     gallery: Array.isArray(obj.gallery)
-      ? obj.gallery.map((item) => ({
-          src: item.src || "",
-          caption: {
-            kn: item.caption?.kn || "",
-            en: item.caption?.en || "",
-          },
-        }))
+      ? obj.gallery.map((item) => {
+          const entry = {
+            src: item.src || "",
+            caption: {
+              kn: item.caption?.kn || "",
+              en: item.caption?.en || "",
+            },
+          };
+          if (
+            typeof item.afterParagraph === "number" &&
+            Number.isInteger(item.afterParagraph) &&
+            item.afterParagraph >= 1
+          ) {
+            entry.afterParagraph = item.afterParagraph;
+          }
+          return entry;
+        })
       : [],
     photoCredit: {
       kn: obj.photoCredit?.kn || "",
@@ -222,6 +232,15 @@ const parseGalleryOrder = (raw) => {
   return parsed;
 };
 
+const parseAfterParagraph = (value) => {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) {
+    throw new Error("afterParagraph must be a positive integer (1-based)");
+  }
+  return n;
+};
+
 const rebuildGallery = (postId, galleryOrder, galleryFiles = []) => {
   const postDir = path.join(ARTICLE_ROOT, String(postId));
   const galleryDir = path.join(postDir, "gallery");
@@ -271,10 +290,18 @@ const rebuildGallery = (postId, galleryOrder, galleryFiles = []) => {
 
       const filename = `${index}${ext}`;
       fs.copyFileSync(sourcePath, path.join(stagingDir, filename));
-      result.push({
+
+      const galleryItem = {
         src: `/images/article/${postId}/gallery/${filename}`,
         caption,
-      });
+      };
+
+      const afterParagraph = parseAfterParagraph(item.afterParagraph);
+      if (afterParagraph !== undefined) {
+        galleryItem.afterParagraph = afterParagraph;
+      }
+
+      result.push(galleryItem);
     });
 
     if (fs.existsSync(galleryDir)) {
