@@ -22,3 +22,5 @@ images/article/**
 !images/article/.gitkeep
 images/film-today/**
 !images/film-today/.gitkeep
+images/poster/**
+!images/poster/.gitkeep

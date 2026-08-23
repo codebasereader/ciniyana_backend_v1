@@ -36,6 +36,7 @@ app.use(cors());
   "images/off-the-camera",
   "images/article",
   "images/film-today",
+  "images/poster",
 ].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -61,6 +62,7 @@ const photoStoryRoutes = require("./routes/photoStory");
 const offTheCameraRoutes = require("./routes/offTheCamera");
 const articleRoutes = require("./routes/article");
 const filmTodayRoutes = require("./routes/filmToday");
+const posterRoutes = require("./routes/poster");
 
 app.use(`${API_ROOT}user`, userRoutes);
 app.use(`${API_ROOT}flashback`, flashBackRoutes);
@@ -70,6 +72,7 @@ app.use(`${API_ROOT}photo-story`, photoStoryRoutes);
 app.use(`${API_ROOT}off-the-camera`, offTheCameraRoutes);
 app.use(`${API_ROOT}article`, articleRoutes);
 app.use(`${API_ROOT}film-today`, filmTodayRoutes);
+app.use(`${API_ROOT}poster`, posterRoutes);
 
 app.use("/", (req, res) => {
   return res.status(200).send("Welcome!");
