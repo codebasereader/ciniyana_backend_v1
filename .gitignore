@@ -14,3 +14,5 @@ images/remembrance/**
 !images/remembrance/.gitkeep
 images/info-special/**
 !images/info-special/.gitkeep
+images/photo-story/**
+!images/photo-story/.gitkeep
