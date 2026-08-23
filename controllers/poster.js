@@ -12,19 +12,10 @@ const toPost = (doc) => {
     id: String(obj._id),
     slug: obj.slug,
     image: obj.image || "",
-    date: obj.date || "",
     order: typeof obj.order === "number" ? obj.order : 0,
     title: {
       kn: obj.title?.kn || "",
       en: obj.title?.en || "",
-    },
-    body: {
-      kn: obj.body?.kn || "",
-      en: obj.body?.en || "",
-    },
-    category: {
-      kn: obj.category?.kn || "",
-      en: obj.category?.en || "",
     },
     layout: obj.layout || "poster",
     createdAt: obj.createdAt,
@@ -70,20 +61,15 @@ const cleanupTemp = (file) => {
 
 const mapBodyFields = (body) => {
   const layout = String(body.layout || "poster").trim();
+  const titleEn = (body.titleEn || "").trim();
+  const titleKn = (body.titleKn || "").trim();
+  const slugSource = body.slug || titleEn;
+
   return {
-    slug: normalizeSlug(body.slug),
-    date: body.date || "",
+    slug: normalizeSlug(slugSource),
     title: {
-      kn: (body.titleKn || "").trim(),
-      en: (body.titleEn || "").trim(),
-    },
-    body: {
-      kn: body.bodyKn || "",
-      en: body.bodyEn || "",
-    },
-    category: {
-      kn: (body.categoryKn || "").trim(),
-      en: (body.categoryEn || "").trim(),
+      kn: titleKn,
+      en: titleEn,
     },
     layout: LAYOUTS.includes(layout) ? layout : "poster",
   };
@@ -107,6 +93,20 @@ const saveHeroImage = (postId, tempFile) => {
   const filename = `hero${safeExt(tempFile.originalname || tempFile.filename)}`;
   fs.renameSync(tempFile.path, path.join(postDir, filename));
   return `/images/poster/${postId}/${filename}`;
+};
+
+const uniqueSlug = async (baseSlug, excludeId = null) => {
+  let slug = baseSlug || "poster";
+  let suffix = 0;
+
+  while (true) {
+    const candidate = suffix === 0 ? slug : `${slug}-${suffix}`;
+    const query = { slug: candidate };
+    if (excludeId) query._id = { $ne: excludeId };
+    const exists = await Poster.findOne(query).select("_id");
+    if (!exists) return candidate;
+    suffix += 1;
+  }
 };
 
 exports.list = async (req, res) => {
@@ -156,16 +156,10 @@ exports.create = async (req, res) => {
   try {
     const fields = mapBodyFields(req.body);
 
-    if (
-      !fields.slug ||
-      !fields.title.kn ||
-      !fields.title.en ||
-      !fields.body.kn ||
-      !fields.body.en
-    ) {
+    if (!fields.title.kn || !fields.title.en) {
       cleanupTemp(req.file);
       return res.status(400).json({
-        message: "slug, titleEn, titleKn, bodyEn and bodyKn are required",
+        message: "titleEn and titleKn are required",
       });
     }
 
@@ -173,15 +167,31 @@ exports.create = async (req, res) => {
       return res.status(400).json({ message: "image is required" });
     }
 
-    const existing = await Poster.findOne({ slug: fields.slug });
-    if (existing) {
+    if (!fields.slug) {
       cleanupTemp(req.file);
-      return res.status(409).json({ message: "Slug already exists" });
+      return res.status(400).json({
+        message: "Could not generate slug from titleEn",
+      });
+    }
+
+    // If client sent an explicit slug that already exists → 409
+    // If slug was auto from titleEn, append a short suffix instead
+    const clientSentSlug = Boolean(req.body.slug);
+    if (clientSentSlug) {
+      const existing = await Poster.findOne({ slug: fields.slug });
+      if (existing) {
+        cleanupTemp(req.file);
+        return res.status(409).json({ message: "Slug already exists" });
+      }
+    } else {
+      fields.slug = await uniqueSlug(fields.slug);
     }
 
     const order = await getNextOrder();
     const post = await Poster.create({
-      ...fields,
+      slug: fields.slug,
+      title: fields.title,
+      layout: fields.layout,
       order,
       image: "",
     });
@@ -231,28 +241,23 @@ exports.update = async (req, res) => {
 
     const fields = mapBodyFields({
       slug: req.body.slug ?? post.slug,
-      date: req.body.date ?? post.date,
       titleKn: req.body.titleKn ?? post.title.kn,
       titleEn: req.body.titleEn ?? post.title.en,
-      bodyKn: req.body.bodyKn ?? post.body.kn,
-      bodyEn: req.body.bodyEn ?? post.body.en,
-      categoryKn: req.body.categoryKn ?? post.category?.kn,
-      categoryEn: req.body.categoryEn ?? post.category?.en,
       layout: req.body.layout ?? post.layout,
     });
 
-    if (
-      !fields.slug ||
-      !fields.title.kn ||
-      !fields.title.en ||
-      !fields.body.kn ||
-      !fields.body.en
-    ) {
+    if (!fields.title.kn || !fields.title.en) {
       cleanupTemp(req.file);
       return res.status(400).json({ message: "Invalid payload" });
     }
 
-    if (fields.slug !== post.slug) {
+    if (!fields.slug) {
+      cleanupTemp(req.file);
+      return res.status(400).json({ message: "Invalid payload" });
+    }
+
+    // Only change slug when the client sends one; otherwise keep existing
+    if (req.body.slug !== undefined && fields.slug !== post.slug) {
       const taken = await Poster.findOne({
         slug: fields.slug,
         _id: { $ne: post._id },
@@ -261,9 +266,11 @@ exports.update = async (req, res) => {
         cleanupTemp(req.file);
         return res.status(409).json({ message: "Slug taken by another post" });
       }
+      post.slug = fields.slug;
     }
 
-    Object.assign(post, fields);
+    post.title = fields.title;
+    post.layout = fields.layout;
 
     if (req.file) {
       try {
@@ -351,7 +358,9 @@ exports.reorder = async (req, res) => {
     }
 
     await Promise.all(
-      orderedIds.map((id, index) => Poster.findByIdAndUpdate(id, { order: index }))
+      orderedIds.map((id, index) =>
+        Poster.findByIdAndUpdate(id, { order: index })
+      )
     );
 
     const posts = await Poster.find().sort({ order: 1 });
