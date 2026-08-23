@@ -2,7 +2,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-const tempDir = path.join(__dirname, "..", "images", "flashback", "temp");
+const tempDir = path.join(__dirname, "..", "images", "temp");
 
 if (!fs.existsSync(tempDir)) {
   fs.mkdirSync(tempDir, { recursive: true });
@@ -14,7 +14,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
-    cb(null, `upload-${Date.now()}${ext}`);
+    cb(null, `upload-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
   },
 });
 

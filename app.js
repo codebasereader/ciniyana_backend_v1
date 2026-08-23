@@ -28,7 +28,10 @@ app.use(cors());
   "assets/images/full/low_res",
   "assets/images/thumb/high_res",
   "assets/images/thumb/low_res",
-  "images/flashback/temp",
+  "images/temp",
+  "images/flashback",
+  "images/remembrance",
+  "images/info-special",
 ].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -48,9 +51,13 @@ app.disable("etag");
 
 const userRoutes = require("./routes/user");
 const flashBackRoutes = require("./routes/flashback");
+const remembranceRoutes = require("./routes/remembrance");
+const infoSpecialRoutes = require("./routes/infoSpecial");
 
 app.use(`${API_ROOT}user`, userRoutes);
 app.use(`${API_ROOT}flashback`, flashBackRoutes);
+app.use(`${API_ROOT}remembrance`, remembranceRoutes);
+app.use(`${API_ROOT}info-special`, infoSpecialRoutes);
 
 app.use("/", (req, res) => {
   return res.status(200).send("Welcome!");
