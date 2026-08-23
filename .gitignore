@@ -20,3 +20,5 @@ images/off-the-camera/**
 !images/off-the-camera/.gitkeep
 images/article/**
 !images/article/.gitkeep
+images/film-today/**
+!images/film-today/.gitkeep
