@@ -63,6 +63,7 @@ const offTheCameraRoutes = require("./routes/offTheCamera");
 const articleRoutes = require("./routes/article");
 const filmTodayRoutes = require("./routes/filmToday");
 const posterRoutes = require("./routes/poster");
+const videoRoutes = require("./routes/video");
 
 app.use(`${API_ROOT}user`, userRoutes);
 app.use(`${API_ROOT}flashback`, flashBackRoutes);
@@ -73,6 +74,7 @@ app.use(`${API_ROOT}off-the-camera`, offTheCameraRoutes);
 app.use(`${API_ROOT}article`, articleRoutes);
 app.use(`${API_ROOT}film-today`, filmTodayRoutes);
 app.use(`${API_ROOT}poster`, posterRoutes);
+app.use(`${API_ROOT}video`, videoRoutes);
 
 app.use("/", (req, res) => {
   return res.status(200).send("Welcome!");
