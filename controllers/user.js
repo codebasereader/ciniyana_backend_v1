@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 const User = require("../models/user");
 const { generateTokens, verifyRefreshToken } = require("../utils/token");
+const { setAuthCookies, clearAuthCookies, accessTokenExpiryMs } = require("../utils/cookies");
 
 exports.register = async (req, res) => {
   try {
@@ -67,11 +68,11 @@ exports.login = async (req, res) => {
     }
 
     const { accessToken, refreshToken } = generateTokens(user);
+    setAuthCookies(res, { accessToken, refreshToken });
 
     return res.status(200).json({
       message: "Login successful",
-      accessToken,
-      refreshToken,
+      accessTokenExpiresAt: Date.now() + accessTokenExpiryMs(),
       user: {
         id: user._id,
         name: user.name,
@@ -89,7 +90,9 @@ exports.login = async (req, res) => {
 
 exports.refresh = async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    // Cookie is the normal (browser) path; body is kept as a fallback for
+    // non-browser API clients that can't rely on cookies.
+    const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
 
     if (!refreshToken) {
       return res.status(400).json({ message: "refreshToken is required" });
@@ -99,20 +102,22 @@ exports.refresh = async (req, res) => {
     try {
       decoded = verifyRefreshToken(refreshToken);
     } catch (error) {
+      clearAuthCookies(res);
       return res.status(401).json({ message: "Invalid or expired refresh token" });
     }
 
     const user = await User.findById(decoded.id);
     if (!user) {
+      clearAuthCookies(res);
       return res.status(401).json({ message: "Invalid or expired refresh token" });
     }
 
     const tokens = generateTokens(user);
+    setAuthCookies(res, tokens);
 
     return res.status(200).json({
       message: "Token refreshed",
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
+      accessTokenExpiresAt: Date.now() + accessTokenExpiryMs(),
     });
   } catch (error) {
     console.error(error);
@@ -120,4 +125,9 @@ exports.refresh = async (req, res) => {
       message: "Failed to refresh token",
     });
   }
+};
+
+exports.logout = (req, res) => {
+  clearAuthCookies(res);
+  return res.status(200).json({ message: "Logged out" });
 };

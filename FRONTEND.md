@@ -4,13 +4,15 @@ Base URL (local): `http://localhost:5000`
 
 All auth endpoints use `Content-Type: application/json`.
 
+**Every request to this API (including plain page loads of protected data) must be made with `credentials: 'include'`** (fetch) or `withCredentials: true` (axios). Auth no longer travels as a bearer token you manage — `accessToken` and `refreshToken` are set by the server as `httpOnly` cookies and the browser attaches them automatically. Your JS never sees the raw tokens.
+
 ---
 
 ## 1. Register
 
 **POST** `/user/register`
 
-Registration is only open (no `Authorization` header needed) when **no admin account exists yet** — i.e. the very first admin. Once at least one admin exists, this endpoint requires a valid admin `accessToken`; a logged-in admin creates any further admin accounts.
+Registration is only open (no cookie needed) when **no admin account exists yet** — i.e. the very first admin. Once at least one admin exists, this endpoint requires the caller to already be a logged-in admin (their session cookie is sent automatically by the browser).
 
 ### Request body
 
@@ -38,14 +40,14 @@ Every account created here is an `"admin"` — there is no client-controlled `ro
 }
 ```
 
-Register does **not** return tokens. After register, send the user to login.
+Register does **not** log the caller in (no cookies are set). After register, send the user to login.
 
 ### Errors
 
 | Status | When |
 |--------|------|
 | `400` | Missing `name`, `email`, or `password` |
-| `401` | An admin already exists and no valid `Authorization: Bearer <accessToken>` was sent |
+| `401` | An admin already exists and the caller isn't a logged-in admin |
 | `409` | Email already registered |
 | `429` | Too many attempts from this IP (rate limited) |
 | `500` | Server error |
@@ -53,13 +55,11 @@ Register does **not** return tokens. After register, send the user to login.
 ### Example (fetch)
 
 ```js
-const register = async ({ name, email, password }, accessToken) => {
+const register = async ({ name, email, password }) => {
   const res = await fetch("http://localhost:5000/user/register", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
+    credentials: "include", // sends the admin's session cookie, if any
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, email, password }),
   });
 
@@ -89,8 +89,7 @@ const register = async ({ name, email, password }, accessToken) => {
 ```json
 {
   "message": "Login successful",
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "accessTokenExpiresAt": 1735599999000,
   "user": {
     "id": "...",
     "name": "Test User",
@@ -100,10 +99,12 @@ const register = async ({ name, email, password }, accessToken) => {
 }
 ```
 
-| Token | Lifetime | Use |
-|-------|----------|-----|
-| `accessToken` | 15 minutes | Send on protected API calls |
-| `refreshToken` | 7 days | Keep on the client for later use |
+The response body never contains the raw tokens — they're set as `httpOnly` cookies on the response (`Set-Cookie`), invisible to JS. `accessTokenExpiresAt` is a plain epoch-ms timestamp so the client can schedule a proactive refresh without ever holding the token itself.
+
+| Cookie | Lifetime | Scope |
+|--------|----------|-------|
+| `accessToken` | 15 minutes (configurable) | Sent on every request (`Path=/`) |
+| `refreshToken` | 7 days | Only sent to `/user/refresh` (`Path=/user/refresh`) |
 
 ### Errors
 
@@ -119,6 +120,7 @@ const register = async ({ name, email, password }, accessToken) => {
 const login = async ({ email, password }) => {
   const res = await fetch("http://localhost:5000/user/login", {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
@@ -126,9 +128,9 @@ const login = async ({ email, password }) => {
   const data = await res.json();
   if (!res.ok) throw new Error(data.message);
 
-  localStorage.setItem("accessToken", data.accessToken);
-  localStorage.setItem("refreshToken", data.refreshToken);
+  // Only non-sensitive UI hints — never the tokens themselves.
   localStorage.setItem("user", JSON.stringify(data.user));
+  localStorage.setItem("accessTokenExpiresAt", String(data.accessTokenExpiresAt));
 
   return data;
 };
@@ -136,54 +138,40 @@ const login = async ({ email, password }) => {
 
 ---
 
-## 3. Store tokens after login
+## 3. Restoring session on app load
 
-Save all three values from the login response:
-
-```js
-localStorage.setItem("accessToken", data.accessToken);
-localStorage.setItem("refreshToken", data.refreshToken);
-localStorage.setItem("user", JSON.stringify(data.user));
-```
-
-On app load, restore session:
+The cookies are `httpOnly`, so you can't check them directly. Treat `user` in `localStorage` as an optimistic "was logged in" hint, then validate it for real with a refresh call (see below) — if that fails, treat the user as logged out.
 
 ```js
-const accessToken = localStorage.getItem("accessToken");
-const refreshToken = localStorage.getItem("refreshToken");
 const user = JSON.parse(localStorage.getItem("user") || "null");
-const isLoggedIn = Boolean(accessToken);
+const accessTokenExpiresAt = Number(localStorage.getItem("accessTokenExpiresAt")) || null;
+const maybeLoggedIn = Boolean(user);
 ```
 
-Logout:
+Logout — **must** call the server; the cookies are `httpOnly` so client JS cannot clear them itself:
 
 ```js
-localStorage.removeItem("accessToken");
-localStorage.removeItem("refreshToken");
+await fetch("http://localhost:5000/user/logout", {
+  method: "POST",
+  credentials: "include",
+});
 localStorage.removeItem("user");
+localStorage.removeItem("accessTokenExpiresAt");
 ```
-
-`localStorage` is simple for SPA work. Prefer `httpOnly` cookies in production if you control both apps on the same domain.
 
 ---
 
-## 4. Call protected APIs with the access token
+## 4. Calling protected APIs
 
-When a backend route requires auth, send:
-
-```
-Authorization: Bearer <accessToken>
-```
+No `Authorization` header to manage — just send `credentials: 'include'` and the browser attaches the `accessToken` cookie automatically.
 
 ```js
 const apiFetch = async (path, options = {}) => {
-  const accessToken = localStorage.getItem("accessToken");
-
   const res = await fetch(`http://localhost:5000${path}`, {
     ...options,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
       ...(options.headers || {}),
     },
   });
@@ -202,53 +190,60 @@ If you get `401`, the access token is missing or expired — call `/user/refresh
 
 **POST** `/user/refresh`
 
-```json
-{ "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
-```
+No request body needed in the browser — the `refreshToken` cookie is sent automatically (it's scoped to this path). No `Authorization` header either.
 
 ### Success — `200`
 
 ```json
 {
   "message": "Token refreshed",
-  "accessToken": "...",
-  "refreshToken": "..."
+  "accessTokenExpiresAt": 1735600899000
 }
 ```
 
-Both tokens are reissued (rotate the stored `refreshToken` to the new value too). Access tokens expire quickly (15 min by default); call this endpoint instead of forcing a full re-login.
+Both cookies are reissued (the refresh token rotates on every call). Access tokens expire quickly; call this endpoint instead of forcing a full re-login.
 
 ### Errors
 
 | Status | When |
 |--------|------|
-| `400` | Missing `refreshToken` |
+| `400` | No refresh token cookie present |
 | `401` | Refresh token invalid, expired, or not a refresh token |
 | `429` | Too many attempts from this IP (rate limited) |
 
 ```js
-const refresh = async (refreshToken) => {
+const refresh = async () => {
   const res = await fetch("http://localhost:5000/user/refresh", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken }),
+    credentials: "include",
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.message);
-  localStorage.setItem("accessToken", data.accessToken);
-  localStorage.setItem("refreshToken", data.refreshToken);
+  localStorage.setItem("accessTokenExpiresAt", String(data.accessTokenExpiresAt));
   return data;
 };
 ```
 
 ---
 
+## 4c. Logout
+
+**POST** `/user/logout`
+
+Clears both cookies server-side. No body, no auth required (safe to call even if the session already looks dead).
+
+```json
+{ "message": "Logged out" }
+```
+
+---
+
 ## 5. Example UI flow
 
-1. **Register page** — form: `name`, `email`, `password` (optional `role`). On success, redirect to login.
-2. **Login page** — form: `email`, `password`. On success, save tokens + user, redirect to dashboard.
-3. **Dashboard / protected pages** — if `accessToken` is missing, redirect to login. Attach `Authorization: Bearer ...` on API calls.
-4. **Logout** — clear storage and redirect to login.
+1. **Register page** — form: `name`, `email`, `password`. On success, redirect to login.
+2. **Login page** — form: `email`, `password`. On success, save `user` + `accessTokenExpiresAt`, redirect to dashboard.
+3. **Dashboard / protected pages** — if no `user` hint, redirect to login. Every request uses `credentials: 'include'`; on `401`, try `/user/refresh` once, retry, and log out if that also fails.
+4. **Logout** — call `/user/logout`, then clear local storage and redirect to login.
 
 ### React sketch
 
@@ -275,21 +270,16 @@ import axios from "axios";
 
 const api = axios.create({
   baseURL: "http://localhost:5000",
-});
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("accessToken");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+  withCredentials: true, // sends/receives the httpOnly auth cookies
 });
 
 export const login = (payload) => api.post("/user/login", payload);
 export const register = (payload) => api.post("/user/register", payload);
+export const refresh = () => api.post("/user/refresh");
+export const logout = () => api.post("/user/logout");
 ```
 
-After `login`, save `response.data.accessToken` and `response.data.refreshToken` the same way as above.
+After `login`, save `response.data.user` and `response.data.accessTokenExpiresAt` the same way as above — never the raw tokens, since the response no longer contains them.
 
 ---
 
@@ -297,8 +287,14 @@ After `login`, save `response.data.accessToken` and `response.data.refreshToken`
 
 The backend only accepts cross-origin requests from an allowlist, not from any origin. By default that's `http://localhost:3000`, `http://localhost:5173`, and their `127.0.0.1` equivalents. A request from any other origin gets a `403 { "message": "Not allowed by CORS" }`.
 
+`credentials: true` is enabled on the CORS config to allow the auth cookies through — this only works together with `credentials: 'include'` on the client (see above) and a specific allowlisted origin (never `*`).
+
 To add your deployed frontend's domain, set `ALLOWED_ORIGINS` in the backend's `.env` (comma-separated, no trailing slash):
 
 ```
 ALLOWED_ORIGINS=https://your-frontend.example.com,http://localhost:3000
 ```
+
+### Cookie `SameSite` and deployment topology
+
+In development, cookies are set with `SameSite=Lax` (works because `localhost:5173` and `localhost:5000` share the same registrable domain). In production (`NODE_ENV=production`), cookies switch to `SameSite=None; Secure`, which requires **HTTPS on both the frontend and the API** — this works regardless of whether the frontend and API share a domain.

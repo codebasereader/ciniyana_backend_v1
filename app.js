@@ -11,6 +11,7 @@ const mongoose = require("mongoose");
 const morgan = require("morgan");
 const helmet = require("helmet");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 const fs = require("fs");
 
 if (!process.env.JWT_SECRET) {
@@ -37,6 +38,9 @@ app.use(
       }
       return callback(new Error("Not allowed by CORS"));
     },
+    // Required for the browser to send/receive the httpOnly auth cookies
+    // cross-origin (frontend and API run on different ports/domains).
+    credentials: true,
   })
 );
 
@@ -69,6 +73,7 @@ app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
 app.use(morgan("dev"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(cookieParser());
 
 const API_ROOT = "/";
 app.use(`${API_ROOT}assets`, express.static(path.join(__dirname, "assets")));
