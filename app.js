@@ -81,6 +81,7 @@ app.use(`${API_ROOT}images`, express.static(path.join(__dirname, "images")));
 app.disable("etag");
 
 const visitRoutes = require("./routes/visits");
+const statsRoutes = require("./routes/stats");
 const userRoutes = require("./routes/user");
 const flashBackRoutes = require("./routes/flashback");
 const remembranceRoutes = require("./routes/remembrance");
@@ -93,6 +94,7 @@ const posterRoutes = require("./routes/poster");
 const videoRoutes = require("./routes/video");
 
 app.use(`${API_ROOT}visits`, visitRoutes);
+app.use(`${API_ROOT}stats`, statsRoutes);
 app.use(`${API_ROOT}user`, userRoutes);
 app.use(`${API_ROOT}flashback`, flashBackRoutes);
 app.use(`${API_ROOT}remembrance`, remembranceRoutes);
