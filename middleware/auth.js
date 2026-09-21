@@ -10,6 +10,11 @@ exports.authenticate = (req, res, next) => {
 
     const token = header.slice(7);
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (decoded.type !== "access") {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
     req.user = decoded;
     next();
   } catch (error) {

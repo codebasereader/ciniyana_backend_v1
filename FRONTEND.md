@@ -10,18 +10,19 @@ All auth endpoints use `Content-Type: application/json`.
 
 **POST** `/user/register`
 
+Registration is only open (no `Authorization` header needed) when **no admin account exists yet** — i.e. the very first admin. Once at least one admin exists, this endpoint requires a valid admin `accessToken`; a logged-in admin creates any further admin accounts.
+
 ### Request body
 
 ```json
 {
   "name": "Test User",
   "email": "test@example.com",
-  "password": "secret123",
-  "role": "admin"
+  "password": "secret123"
 }
 ```
 
-`role` is optional. If omitted, it defaults to `"admin"`. Currently the only allowed role is `"admin"`.
+Every account created here is an `"admin"` — there is no client-controlled `role` field.
 
 ### Success — `201`
 
@@ -43,18 +44,23 @@ Register does **not** return tokens. After register, send the user to login.
 
 | Status | When |
 |--------|------|
-| `400` | Missing `name`, `email`, or `password`, or invalid `role` |
+| `400` | Missing `name`, `email`, or `password` |
+| `401` | An admin already exists and no valid `Authorization: Bearer <accessToken>` was sent |
 | `409` | Email already registered |
+| `429` | Too many attempts from this IP (rate limited) |
 | `500` | Server error |
 
 ### Example (fetch)
 
 ```js
-const register = async ({ name, email, password, role = "admin" }) => {
+const register = async ({ name, email, password }, accessToken) => {
   const res = await fetch("http://localhost:5000/user/register", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password, role }),
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({ name, email, password }),
   });
 
   const data = await res.json();
@@ -188,7 +194,52 @@ const apiFetch = async (path, options = {}) => {
 };
 ```
 
-If you get `401`, the access token is missing or expired. Send the user back to login (there is no refresh API on this backend).
+If you get `401`, the access token is missing or expired — call `/user/refresh` (see below) to get a new one, or send the user back to login if refresh also fails.
+
+---
+
+## 4b. Refresh the access token
+
+**POST** `/user/refresh`
+
+```json
+{ "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+```
+
+### Success — `200`
+
+```json
+{
+  "message": "Token refreshed",
+  "accessToken": "...",
+  "refreshToken": "..."
+}
+```
+
+Both tokens are reissued (rotate the stored `refreshToken` to the new value too). Access tokens expire quickly (15 min by default); call this endpoint instead of forcing a full re-login.
+
+### Errors
+
+| Status | When |
+|--------|------|
+| `400` | Missing `refreshToken` |
+| `401` | Refresh token invalid, expired, or not a refresh token |
+| `429` | Too many attempts from this IP (rate limited) |
+
+```js
+const refresh = async (refreshToken) => {
+  const res = await fetch("http://localhost:5000/user/refresh", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message);
+  localStorage.setItem("accessToken", data.accessToken);
+  localStorage.setItem("refreshToken", data.refreshToken);
+  return data;
+};
+```
 
 ---
 
@@ -244,6 +295,10 @@ After `login`, save `response.data.accessToken` and `response.data.refreshToken`
 
 ## 7. CORS
 
-The backend already enables CORS. For a frontend on another origin (for example `http://localhost:3000` or `http://localhost:5173`), no extra header work is needed for these JSON calls.
+The backend only accepts cross-origin requests from an allowlist, not from any origin. By default that's `http://localhost:3000`, `http://localhost:5173`, and their `127.0.0.1` equivalents. A request from any other origin gets a `403 { "message": "Not allowed by CORS" }`.
 
-If you later switch the frontend origin, keep using the same base URL: `http://localhost:5000`.
+To add your deployed frontend's domain, set `ALLOWED_ORIGINS` in the backend's `.env` (comma-separated, no trailing slash):
+
+```
+ALLOWED_ORIGINS=https://your-frontend.example.com,http://localhost:3000
+```

@@ -242,9 +242,9 @@ exports.list = async (req, res) => {
     const docs = await FilmToday.find().sort({ order: 1 });
     return res.status(200).json({ posts: docs.map(toPost) });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       message: "Failed to list film today posts",
-      error: error.message,
     });
   }
 };
@@ -273,9 +273,9 @@ exports.getBySlug = async (req, res) => {
       related: related.map(toPost),
     });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       message: "Failed to get film today post",
-      error: error.message,
     });
   }
 };
@@ -357,9 +357,9 @@ exports.create = async (req, res) => {
     if (error.code === 11000) {
       return res.status(409).json({ message: "Slug already exists" });
     }
+    console.error(error);
     return res.status(500).json({
       message: "Server / upload error",
-      error: error.message,
     });
   }
 };
@@ -470,9 +470,9 @@ exports.update = async (req, res) => {
     if (error.code === 11000) {
       return res.status(409).json({ message: "Slug taken by another post" });
     }
+    console.error(error);
     return res.status(500).json({
       message: "Failed to update film today post",
-      error: error.message,
     });
   }
 };
@@ -495,9 +495,9 @@ exports.remove = async (req, res) => {
       message: "Film Today post deleted",
     });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       message: "Failed to delete film today post",
-      error: error.message,
     });
   }
 };
@@ -546,9 +546,9 @@ exports.reorder = async (req, res) => {
       posts: posts.map(toPost),
     });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       message: "Failed to reorder film today posts",
-      error: error.message,
     });
   }
 };

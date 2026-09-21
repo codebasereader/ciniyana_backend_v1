@@ -18,7 +18,27 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
-app.use(cors());
+const defaultOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:5173",
+];
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim())
+  : defaultOrigins;
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow non-browser clients (no Origin header) and configured origins.
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
+  })
+);
 
 /* Make sure media upload folders exist before the first image/document write */
 [
@@ -43,6 +63,7 @@ app.use(cors());
   }
 });
 
+app.use(helmet());
 app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
 
 app.use(morgan("dev"));
@@ -78,6 +99,14 @@ app.use(`${API_ROOT}video`, videoRoutes);
 
 app.use("/", (req, res) => {
   return res.status(200).send("Welcome!");
+});
+
+app.use((err, req, res, next) => {
+  if (err && err.message === "Not allowed by CORS") {
+    return res.status(403).json({ message: "Not allowed by CORS" });
+  }
+  console.error(err);
+  return res.status(500).json({ message: "Internal server error" });
 });
 
 const DB_URL = process.env.DB_URL;

@@ -123,9 +123,9 @@ exports.list = async (req, res) => {
     const docs = await Video.find().sort({ order: 1 });
     return res.status(200).json({ posts: docs.map(toPost) });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       message: "Failed to list video posts",
-      error: error.message,
     });
   }
 };
@@ -154,9 +154,9 @@ exports.getBySlug = async (req, res) => {
       related: related.map(toPost),
     });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       message: "Failed to get video post",
-      error: error.message,
     });
   }
 };
@@ -221,9 +221,9 @@ exports.create = async (req, res) => {
     if (error.code === 11000) {
       return res.status(409).json({ message: "Slug already exists" });
     }
+    console.error(error);
     return res.status(500).json({
       message: "Server error",
-      error: error.message,
     });
   }
 };
@@ -303,9 +303,9 @@ exports.update = async (req, res) => {
     if (error.code === 11000) {
       return res.status(409).json({ message: "Slug taken by another post" });
     }
+    console.error(error);
     return res.status(500).json({
       message: "Failed to update video post",
-      error: error.message,
     });
   }
 };
@@ -323,9 +323,9 @@ exports.remove = async (req, res) => {
 
     return res.status(200).json({ message: "Video post deleted" });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       message: "Failed to delete video post",
-      error: error.message,
     });
   }
 };
@@ -373,9 +373,9 @@ exports.reorder = async (req, res) => {
       posts: posts.map(toPost),
     });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({
       message: "Failed to reorder video posts",
-      error: error.message,
     });
   }
 };
