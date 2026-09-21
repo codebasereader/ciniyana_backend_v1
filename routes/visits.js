@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const rateLimit = require("express-rate-limit");
 const visitsController = require("../controllers/visits");
+const { authenticate } = require("../middleware/auth");
 
 const trackLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -12,5 +13,6 @@ const trackLimiter = rateLimit({
 });
 
 router.post("/track", trackLimiter, visitsController.track);
+router.get("/stats", authenticate, visitsController.stats);
 
 module.exports = router;
