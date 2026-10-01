@@ -1,27 +1,27 @@
 node_modules/
 .env
 .worktrees/
-assets/documents/*
-!assets/documents/.gitkeep
-assets/temp_resources/*
-!assets/temp_resources/.gitkeep
-assets/images/**/*
-!assets/images/**/.gitkeep
-images/temp/**
-!images/temp/.gitkeep
-images/flashback/**
-!images/flashback/.gitkeep
-images/remembrance/**
-!images/remembrance/.gitkeep
-images/info-special/**
-!images/info-special/.gitkeep
-images/photo-story/**
-!images/photo-story/.gitkeep
-images/off-the-camera/**
-!images/off-the-camera/.gitkeep
-images/article/**
-!images/article/.gitkeep
-images/film-today/**
-!images/film-today/.gitkeep
-images/poster/**
-!images/poster/.gitkeep
+# assets/documents/*
+# !assets/documents/.gitkeep
+# assets/temp_resources/*
+# !assets/temp_resources/.gitkeep
+# assets/images/**/*
+# !assets/images/**/.gitkeep
+# images/temp/**
+# !images/temp/.gitkeep
+# images/flashback/**
+# !images/flashback/.gitkeep
+# images/remembrance/**
+# !images/remembrance/.gitkeep
+# images/info-special/**
+# !images/info-special/.gitkeep
+# images/photo-story/**
+# !images/photo-story/.gitkeep
+# images/off-the-camera/**
+# !images/off-the-camera/.gitkeep
+# images/article/**
+# !images/article/.gitkeep
+# images/film-today/**
+# !images/film-today/.gitkeep
+# images/poster/**
+# !images/poster/.gitkeep
