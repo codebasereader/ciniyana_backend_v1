@@ -36,12 +36,12 @@ exports.setAuthCookies = (res, { accessToken, refreshToken }) => {
     ...baseCookieOptions,
     // Scoped narrower than "/" — only the refresh/logout flow ever needs to
     // see this cookie, so no other route can leak it.
-    path: "/user/refresh",
+    path: "/api/user/refresh",
     maxAge: exports.refreshTokenExpiryMs(),
   });
 };
 
 exports.clearAuthCookies = (res) => {
   res.clearCookie("accessToken", { ...baseCookieOptions });
-  res.clearCookie("refreshToken", { ...baseCookieOptions, path: "/user/refresh" });
+  res.clearCookie("refreshToken", { ...baseCookieOptions, path: "/api/user/refresh" });
 };

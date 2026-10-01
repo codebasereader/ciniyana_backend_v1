@@ -86,7 +86,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 
-const API_ROOT = "/";
+const API_ROOT = "/api/";
 app.use(`${API_ROOT}assets`, express.static(path.join(__dirname, "assets")));
 app.use(`${API_ROOT}images`, express.static(path.join(__dirname, "images")));
 app.disable("etag");
