@@ -19,21 +19,32 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
-const defaultOrigins = [
+function normalizeOrigin(origin) {
+  return String(origin || "")
+    .trim()
+    .replace(/\/+$/, "");
+}
+
+const builtinOrigins = [
+  "https://www.planclothes.xyz",
+  "https://planclothes.xyz",
   "http://localhost:3000",
   "http://localhost:5173",
   "http://127.0.0.1:3000",
   "http://127.0.0.1:5173",
 ];
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim())
-  : defaultOrigins;
+const envOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map(normalizeOrigin)
+  .filter(Boolean);
+const allowedOrigins = new Set([...builtinOrigins, ...envOrigins]);
 
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow non-browser clients (no Origin header) and configured origins.
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Browsers omit the trailing slash on Origin, so strip it before comparing.
+      if (!origin || allowedOrigins.has(normalizeOrigin(origin))) {
         return callback(null, true);
       }
       return callback(new Error("Not allowed by CORS"));
