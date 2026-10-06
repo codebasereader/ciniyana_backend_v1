@@ -1,6 +1,27 @@
 const ACCESS_TOKEN_TTL = process.env.ACCESS_TOKEN_EXPIRY || "15m";
-const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_EXPIRY || "7d";
-const isProd = process.env.NODE_ENV === "production";
+const REFRESH_TOKEN_TTL = process.env.REFRESH_TOKEN_EXPIRY || "8h";
+
+/**
+ * Cookies are Secure unless explicitly turned off. `COOKIE_SECURE=false` is
+ * only for a local/UAT setup served over plain http (browsers drop Secure
+ * cookies there); `NODE_ENV=development` also relaxes it for local work.
+ */
+function resolveSecure() {
+  const flag = String(process.env.COOKIE_SECURE || "").trim().toLowerCase();
+  if (flag === "true") return true;
+  if (flag === "false") return false;
+  return process.env.NODE_ENV !== "development";
+}
+
+const VALID_SAMESITE = ["lax", "strict", "none"];
+function resolveSameSite(secure) {
+  const value = String(process.env.COOKIE_SAMESITE || "").trim().toLowerCase();
+  // "none" is rejected by browsers unless the cookie is also Secure.
+  if (VALID_SAMESITE.includes(value) && (value !== "none" || secure)) return value;
+  return "lax";
+}
+
+const secure = resolveSecure();
 
 const MULTIPLIERS = { s: 1000, m: 60 * 1000, h: 60 * 60 * 1000, d: 24 * 60 * 60 * 1000 };
 
@@ -16,11 +37,11 @@ function parseDurationMs(value, fallbackMs) {
 
 const baseCookieOptions = {
   httpOnly: true,
-  secure: isProd,
-  // Same registrable domain in dev (localhost:5173 <-> localhost:5000) works
-  // with "lax"; cross-site production deployments need "none" (requires
-  // secure: true, which is set above).
-  sameSite: isProd ? "none" : "lax",
+  secure,
+  // "lax" works when the frontend and API share a registrable domain (also
+  // localhost:5173 <-> localhost:5000 in dev). Set COOKIE_SAMESITE=none only
+  // for a genuinely cross-site deployment (needs Secure).
+  sameSite: resolveSameSite(secure),
   path: "/",
 };
 

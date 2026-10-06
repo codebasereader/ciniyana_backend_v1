@@ -206,7 +206,6 @@ exports.create = async (req, res) => {
       cleanupTemp(req.file);
       return res.status(500).json({
         message: "Server / upload error",
-        error: uploadError.message,
       });
     }
 
@@ -284,7 +283,6 @@ exports.update = async (req, res) => {
         cleanupTemp(req.file);
         return res.status(500).json({
           message: "Server / upload error",
-          error: uploadError.message,
         });
       }
     }

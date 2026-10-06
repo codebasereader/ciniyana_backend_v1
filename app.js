@@ -13,6 +13,8 @@ const helmet = require("helmet");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const fs = require("fs");
+const rateLimit = require("express-rate-limit");
+const { auditMutations } = require("./utils/audit");
 
 if (!process.env.JWT_SECRET) {
   console.error("Missing JWT_SECRET in .env");
@@ -78,8 +80,26 @@ app.use(
   }
 });
 
-app.use(helmet());
-app.use(helmet.crossOriginResourcePolicy({ policy: "cross-origin" }));
+// Behind Apache (reverse proxy) the real client IP arrives via
+// X-Forwarded-For; without this every request looks like it comes from the
+// proxy and rate limits are shared by all users.
+app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS || 1));
+app.disable("x-powered-by");
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    frameguard: { action: "deny" },
+    strictTransportSecurity: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+    },
+    // This is a JSON/static-file API, so lock framing down completely.
+    contentSecurityPolicy: {
+      directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] },
+    },
+  })
+);
 
 app.use(morgan("dev"));
 app.use(express.json({ limit: "10mb" }));
@@ -87,9 +107,27 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(cookieParser());
 
 const API_ROOT = "/api/";
-app.use(`${API_ROOT}assets`, express.static(path.join(__dirname, "assets")));
-app.use(`${API_ROOT}images`, express.static(path.join(__dirname, "images")));
+// Uploaded files are served as inert, never-sniffed static content.
+const staticOptions = {
+  dotfiles: "deny",
+  index: false,
+  setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
+};
+app.use(`${API_ROOT}assets`, express.static(path.join(__dirname, "assets"), staticOptions));
+app.use(`${API_ROOT}images`, express.static(path.join(__dirname, "images"), staticOptions));
 app.disable("etag");
+
+// General per-IP ceiling for the whole API (login has its own, stricter one).
+app.use(
+  API_ROOT,
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: Number(process.env.API_RATE_LIMIT_PER_MIN || 300),
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: "Too many requests, please slow down" },
+  })
+);
 
 const visitRoutes = require("./routes/visits");
 const statsRoutes = require("./routes/stats");
@@ -107,15 +145,15 @@ const videoRoutes = require("./routes/video");
 app.use(`${API_ROOT}visits`, visitRoutes);
 app.use(`${API_ROOT}stats`, statsRoutes);
 app.use(`${API_ROOT}user`, userRoutes);
-app.use(`${API_ROOT}flashback`, flashBackRoutes);
-app.use(`${API_ROOT}remembrance`, remembranceRoutes);
-app.use(`${API_ROOT}info-special`, infoSpecialRoutes);
-app.use(`${API_ROOT}photo-story`, photoStoryRoutes);
-app.use(`${API_ROOT}off-the-camera`, offTheCameraRoutes);
-app.use(`${API_ROOT}article`, articleRoutes);
-app.use(`${API_ROOT}film-today`, filmTodayRoutes);
-app.use(`${API_ROOT}poster`, posterRoutes);
-app.use(`${API_ROOT}video`, videoRoutes);
+app.use(`${API_ROOT}flashback`, auditMutations("flashback"), flashBackRoutes);
+app.use(`${API_ROOT}remembrance`, auditMutations("remembrance"), remembranceRoutes);
+app.use(`${API_ROOT}info-special`, auditMutations("info-special"), infoSpecialRoutes);
+app.use(`${API_ROOT}photo-story`, auditMutations("photo-story"), photoStoryRoutes);
+app.use(`${API_ROOT}off-the-camera`, auditMutations("off-the-camera"), offTheCameraRoutes);
+app.use(`${API_ROOT}article`, auditMutations("article"), articleRoutes);
+app.use(`${API_ROOT}film-today`, auditMutations("film-today"), filmTodayRoutes);
+app.use(`${API_ROOT}poster`, auditMutations("poster"), posterRoutes);
+app.use(`${API_ROOT}video`, auditMutations("video"), videoRoutes);
 
 app.use("/", (req, res) => {
   return res.status(200).send("Welcome!");
@@ -124,6 +162,10 @@ app.use("/", (req, res) => {
 app.use((err, req, res, next) => {
   if (err && err.message === "Not allowed by CORS") {
     return res.status(403).json({ message: "Not allowed by CORS" });
+  }
+  // Malformed JSON / oversized body are client errors, not server faults.
+  if (err && (err.type === "entity.parse.failed" || err.type === "entity.too.large")) {
+    return res.status(err.status || 400).json({ message: "Invalid request body" });
   }
   console.error(err);
   return res.status(500).json({ message: "Internal server error" });
@@ -151,7 +193,10 @@ mongoose
       }
     }
 
-    server.listen(PORT, () => {
+    // LISTEN_HOST=127.0.0.1 keeps Node reachable only through the reverse
+    // proxy. Unset = all interfaces (previous behaviour).
+    const listenArgs = process.env.LISTEN_HOST ? [PORT, process.env.LISTEN_HOST] : [PORT];
+    server.listen(...listenArgs, () => {
       console.log("DB Connection Successful");
       console.log(`Server running on port ${PORT}`);
     });

@@ -1,6 +1,10 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/user");
 
-exports.authenticate = (req, res, next) => {
+const unauthorized = (res, code) =>
+  res.status(401).json({ message: "Unauthorized", ...(code ? { code } : {}) });
+
+exports.authenticate = async (req, res, next) => {
   try {
     const header = req.headers.authorization;
     const bearerToken = header && header.startsWith("Bearer ") ? header.slice(7) : null;
@@ -9,18 +13,28 @@ exports.authenticate = (req, res, next) => {
     const token = req.cookies?.accessToken || bearerToken;
 
     if (!token) {
-      return res.status(401).json({ message: "Unauthorized" });
+      return unauthorized(res);
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     if (decoded.type !== "access") {
-      return res.status(401).json({ message: "Unauthorized" });
+      return unauthorized(res);
+    }
+
+    // Only the most recent login is valid: the token's session id must match
+    // the one stored on the account (also invalidates tokens after logout).
+    const user = await User.findById(decoded.id).select("activeSessionId");
+    if (!user || !user.activeSessionId) {
+      return unauthorized(res);
+    }
+    if (decoded.sid !== user.activeSessionId) {
+      return unauthorized(res, "SESSION_REPLACED");
     }
 
     req.user = decoded;
     next();
   } catch (error) {
-    return res.status(401).json({ message: "Unauthorized" });
+    return unauthorized(res);
   }
 };

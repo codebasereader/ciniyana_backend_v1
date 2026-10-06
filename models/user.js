@@ -23,6 +23,12 @@ const userSchema = new mongoose.Schema(
       enum: ["admin"],
       default: "admin",
     },
+    // Id of the one currently valid login session. Tokens carry it as `sid`;
+    // a new login replaces it, which signs out any older session.
+    activeSessionId: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );

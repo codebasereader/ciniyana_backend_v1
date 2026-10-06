@@ -439,7 +439,6 @@ exports.create = async (req, res) => {
       cleanupTemps(galleryFiles);
       return res.status(500).json({
         message: "Server / upload error",
-        error: uploadError.message,
       });
     }
 
@@ -565,7 +564,6 @@ exports.update = async (req, res) => {
         cleanupTemps(galleryFiles);
         return res.status(500).json({
           message: "Server / upload error",
-          error: uploadError.message,
         });
       }
     }
@@ -583,7 +581,6 @@ exports.update = async (req, res) => {
         cleanupTemps(galleryFiles);
         return res.status(500).json({
           message: "Server / upload error",
-          error: uploadError.message,
         });
       }
     }

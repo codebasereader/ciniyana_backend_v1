@@ -1,7 +1,14 @@
+const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const User = require("../models/user");
 const { generateTokens, verifyRefreshToken } = require("../utils/token");
+const { audit } = require("../utils/audit");
 const { setAuthCookies, clearAuthCookies, accessTokenExpiryMs } = require("../utils/cookies");
+
+// Compared against when the email is unknown so a missing account costs the
+// same time as a wrong password (prevents account enumeration by timing).
+const DUMMY_HASH = bcrypt.hashSync("not-a-real-password", 10);
 
 exports.register = async (req, res) => {
   try {
@@ -57,17 +64,27 @@ exports.login = async (req, res) => {
       });
     }
 
+    if (typeof email !== "string" || typeof password !== "string") {
+      return res.status(400).json({ message: "email and password are required" });
+    }
+
     const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      user ? user.password : DUMMY_HASH
+    );
+    if (!user || !isPasswordValid) {
+      audit(req, "auth.login_failed", { actor: email.toLowerCase() });
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: "Invalid email or password" });
-    }
+    // New login replaces any previous session for this account.
+    const sid = crypto.randomUUID();
+    user.activeSessionId = sid;
+    await user.save();
 
-    const { accessToken, refreshToken } = generateTokens(user);
+    const { accessToken, refreshToken } = generateTokens(user, sid);
+    audit(req, "auth.login", { actor: user.email });
     setAuthCookies(res, { accessToken, refreshToken });
 
     return res.status(200).json({
@@ -112,7 +129,15 @@ exports.refresh = async (req, res) => {
       return res.status(401).json({ message: "Invalid or expired refresh token" });
     }
 
-    const tokens = generateTokens(user);
+    if (!user.activeSessionId || decoded.sid !== user.activeSessionId) {
+      clearAuthCookies(res);
+      return res.status(401).json({
+        message: "Invalid or expired refresh token",
+        code: "SESSION_REPLACED",
+      });
+    }
+
+    const tokens = generateTokens(user, user.activeSessionId);
     setAuthCookies(res, tokens);
 
     return res.status(200).json({
@@ -127,7 +152,21 @@ exports.refresh = async (req, res) => {
   }
 };
 
-exports.logout = (req, res) => {
+exports.logout = async (req, res) => {
+  // Revoke server-side too, so a copied token stops working after logout.
+  try {
+    const token = req.cookies?.accessToken || req.cookies?.refreshToken;
+    const decoded = token ? jwt.verify(token, process.env.JWT_SECRET, { ignoreExpiration: true }) : null;
+    if (decoded?.id) {
+      await User.updateOne(
+        { _id: decoded.id, activeSessionId: decoded.sid },
+        { $set: { activeSessionId: null } }
+      );
+      audit(req, "auth.logout", { actor: decoded.email });
+    }
+  } catch {
+    // Expired/invalid token — nothing to revoke, still clear the cookies.
+  }
   clearAuthCookies(res);
   return res.status(200).json({ message: "Logged out" });
 };

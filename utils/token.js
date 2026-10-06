@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 
-exports.generateTokens = (user) => {
+exports.generateTokens = (user, sid) => {
   const secret = process.env.JWT_SECRET;
 
   if (!secret) {
@@ -11,6 +11,7 @@ exports.generateTokens = (user) => {
     id: user._id,
     email: user.email,
     role: user.role,
+    sid,
   };
 
   const accessToken = jwt.sign({ ...basePayload, type: "access" }, secret, {
@@ -18,7 +19,7 @@ exports.generateTokens = (user) => {
   });
 
   const refreshToken = jwt.sign({ ...basePayload, type: "refresh" }, secret, {
-    expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "7d",
+    expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "8h",
   });
 
   return { accessToken, refreshToken };
